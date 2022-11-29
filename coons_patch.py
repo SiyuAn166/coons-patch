@@ -1,8 +1,8 @@
 import numpy as np 
-import matplotlib.pyplot as plt 
 from math import factorial
 from bpy import context
 import bpy
+import bmesh
 
 def triangulate_object(obj):
     me = obj.data
@@ -43,8 +43,9 @@ def readPoints(filename):
         points = []
         for line in file:
             values = line.split()
-            x,y,z = float(values[0]), float(values[1]), float(values[2])
-            points.append([x,y,z])
+            if values:
+                x,y,z = float(values[0]), float(values[1]), float(values[2])
+                points.append([x,y,z])
     return points
 
 
@@ -61,27 +62,25 @@ def evaluate_bezier(points, total):
     return new_points
 
 
-def coons_patch(curve, curve2, curve3, curve4, steps):
+def coons_patch(bcurves, steps):
     M1, M2, M3 = [], [], []
-
-    #Set boundary points
-    p1 = curve[0]
-    p2 = curve[-1]
-    p3 = curve2[0]
-    p4 = curve2[-1]
+    c0,c1,c2,c3 = bcurves
+    p1,p2,p3,p4 = c0[0],c0[-1],c1[0],c1[-1]
 
     for u in range(int(1/steps)):
         for v in range(int(1/steps)):
-            patch1_point= (1-u*steps)*curve[u,:]+u*steps*curve2[u,:] # linear interpolation
+            patch1_point= (1-v*steps)*c0[v,:]+v*steps*c1[v,:]
             M1.append(patch1_point)
-            patch2_point = (1-v*steps)*curve3[v,:]+v*steps*curve4[v,:]
+            patch2_point = (1-u*steps)*c2[u,:]+u*steps*c3[u,:]
             M2.append(patch2_point)
-            patch3_point = (1-u*steps)*(1-v*steps)*p1+u*steps*(1-v*steps)*p2+v*steps*(1-u*steps)*p3+u*steps*v*steps*p4 # bilinear
+            patch3_point = (1-u*steps)*(1-v*steps)*p1+u*steps*(1-v*steps)*p2+v*steps*(1-u*steps)*p3+u*steps*v*steps*p4
             M3.append(patch3_point)
 
     coons_patch = np.array(M1)+np.array(M2)-np.array(M3)
 
     return coons_patch
+
+
 
 def makeFaces(verts):
     faces=[]
@@ -130,11 +129,8 @@ bc = []
 for c in curves:
     bc.append(evaluate_bezier(c, num_points))
 bc = np.array(bc)
-
-# M = M1 + M2 - M3
-c0,c1,c2,c3 = bc
 steps = 1e-2
-patch = coons_patch(c0,c1,c2,c3,steps)
+patch = coons_patch(bc,steps)
 objects = make_ob_file(patch)
 filepath = "E:/A3/test.obj"
 obj = context.object
